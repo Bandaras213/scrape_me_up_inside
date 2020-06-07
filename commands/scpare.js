@@ -9,7 +9,7 @@ let baseurl = "https://mangakakalot.com"
 let urladd1 = "/search/"
 let urladd2 = "/chapter/"
 
-let searchstring = "Ake no Tobari"
+let searchstring = "Ake no Tobari" //placeholder
 let chapternr = "/chapter_1"
 
 function regex(searchstring) {
