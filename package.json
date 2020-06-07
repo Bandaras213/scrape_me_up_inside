@@ -7,8 +7,9 @@
     "start": "node server.js"
   },
   "dependencies": {
-    "express": "^4.17.1",
-    "osmosis": "^1.1.10"
+    "axios": "^0.19.2",
+    "cheerio": "^0.22.0",
+    "image-downloader": "^4.0.1"
   },
   "engines": {
     "node": "12.x"
