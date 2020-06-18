@@ -205,7 +205,7 @@ rl.question('What Chapter do you want to Download from ' + chapterlist.length + 
   if (answer > chapterlist.length) {
     console.log("Your Answer was not in the Chapter range try again.")
   } else {
-    let chapterlistel = $(chapterlist[answer])
+    let chapterlistel = $(chapterlist[answer - 1])
     .find("span")
     .find("a")
     .text()
@@ -432,7 +432,7 @@ function getchapter1(str, newname, chapterlist, $) {
     if (answer > chapterlist.length) {
       console.log("Your Answer was not in the Chapter range try again.")
     } else {
-      let chapterlistel = $(chapterlist[answer])
+      let chapterlistel = $(chapterlist[answer - 1])
       .find("a")
       .text()
       let searchfor = ":";
