@@ -1,7 +1,7 @@
 {
-  "name": "manga_scraper",
+  "name": "hello-express",
   "version": "0.0.1",
-  "description": "Manga scraper to get images and save them.",
+  "description": "A simple Node app built on Express, instantly up and running.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -9,9 +9,20 @@
   "dependencies": {
     "axios": "^0.19.2",
     "cheerio": "^0.22.0",
-    "image-downloader": "^4.0.1"
+    "image-downloader": "^4.0.1",
+    "zip-a-folder": "^0.0.12",
+    "del": "^5.1.0"
   },
   "engines": {
     "node": "12.x"
-  }
+  },
+  "repository": {
+    "url": "https://glitch.com/edit/#!/hello-express"
+  },
+  "license": "MIT",
+  "keywords": [
+    "node",
+    "glitch",
+    "express"
+  ]
 }
