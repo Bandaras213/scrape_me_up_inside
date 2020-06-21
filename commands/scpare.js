@@ -2,22 +2,18 @@ const axios = require("axios");
 const cheerio = require("cheerio");
 const download = require("image-downloader");
 const fs = require('fs');
-const zipFolder = require('zip-a-folder');
+const { zip } = require('zip-a-folder');
 const del = require('del');
 const readline = require('readline');
 
-let arrurl = [];
-let arrname = [];
-
 let baseurl = "https://mangakakalot.com";
 let urladd1 = "/search/story/";
-let urladd2 = "/chapter/";
+
+let arrurl = [];
 
 let searchstring = process.argv.shift();
 searchstring = process.argv.shift();
 searchstring = process.argv.join(" ");
-
-let chapternr = "/chapter_1"; //new process.argv promp later with range and shows min max chapters
 
 function regex(searchstring) {
   let str = searchstring.toLowerCase();
@@ -61,6 +57,8 @@ function regexall2(searchstring) {
 
 regex(searchstring);
 
+let jsonobj;
+
 function searchitem(str) {
   axios.get(baseurl + urladd1 + str).then(response => {
     const $ = cheerio.load(response.data);
@@ -80,6 +78,9 @@ function searchitem(str) {
     }
   });
 }
+
+//////// Mangakakarot.com \\\\\\\\
+
 
 function getinfos(url, str, $) {
   let newname = str;
@@ -201,11 +202,20 @@ const rl = readline.createInterface({
   output: process.stdout
 });
 
-rl.question('What Chapter do you want to Download from ' + chapterlist.length + "?", (answer) => {
-  if (answer > chapterlist.length) {
+rl.question('What Chapter do you want to Download from ' + chapterlist.length + "? (Maximum is 5 at a time. Use 1 Number or a Number range like 1-5.)", (answer) => {
+  var multiget = answer.split('-', 2);
+  if (multiget > 2) {
     console.log("Your Answer was not in the Chapter range try again.")
-  } else {
-    let chapterlistel = $(chapterlist[answer - 1])
+  }
+  if (multiget[0] == NaN) {
+    console.log("The first Number was not a Number " + multiget[0])
+  } else if (multiget[1] == NaN && multiget[1] != undefined) {
+    console.log("The first Number was not a Number " + multiget[1])
+  }
+  if (multiget[1] == undefined) {
+    let chapternamearr = [];
+    let chapternamearrreal = [];
+    let chapterlistel = $(chapterlist[multiget[0] - 1])
     .find("span")
     .find("a")
     .text()
@@ -216,79 +226,149 @@ rl.question('What Chapter do you want to Download from ' + chapterlist.length + 
       chapterdir = chapterlistel.substring(0, chaptersearch);
       chapterlistel = chapterdir
     }
-
-    startscrape(regexall2(chapterlistel), regexall(chapterlistel))
+    chapternamearr.push(regexall2(chapterlistel))
+    chapternamearrreal.push(regexall(chapterlistel))
+    startscrape(chapternamearr, chapternamearrreal)
+  } else {
+    let chapternamearr = [];
+    let chapternamearrreal = [];
+    for (let i = multiget[0] - 1; i < multiget[1]; i++) {
+    let chapterlistel = $(chapterlist[i])
+    .find("span")
+    .find("a")
+    .text()
+    let searchfor = ":";
+    let chaptersearch = chapterlistel.search(searchfor);
+    if (chaptersearch == -1) {
+    } else {
+      chapterdir = chapterlistel.substring(0, chaptersearch);
+      chapterlistel = chapterdir
+    }
+    chapternamearr.push(regexall2(chapterlistel))
+    chapternamearrreal.push(regexall(chapterlistel))
+  }
+    startscrape(chapternamearr, chapternamearrreal)
   }
 rl.close();
 });
-function startscrape(answer, answer2) {
-  var scrape = function (callback) {
-    axios.get(str + "/" + answer).then(response => {
+
+async function startscrape(answer, answer2) {
+  let newjsonobject
+  async function read() {
+    var obj = await JSON.parse(fs.readFileSync('./downloadlist.json', 'utf8'));
+    jsonobj = obj
+  }
+  
+  await read();
+  for (let i = 0; i < answer.length; i++) {
+    arrurl = [];
+
+    function getindex(object) {
+      let index = object.findIndex(ads => ads.name==newname)
+      return index
+    }
+
+    async function writenewentry(obj) {
+      newjsonobject = new Object( obj.downloads )
+        if (getindex(newjsonobject) == -1) {
+          newjsonobject[newjsonobject.length] = {"name": newname, "chapterdownloaded": []}
+          jsonobj = obj
+          await testchapterexist(jsonobj.downloads[getindex(newjsonobject)])
+        } else {
+          await testchapterexist(obj.downloads[getindex(newjsonobject)])
+        }
+    }    
+
+    await writenewentry(jsonobj)
+    
+  async function testchapterexist(a1) {
+      let even = (element) => element === answer[i];
+      if (a1.chapterdownloaded.some(even) == true) {
+      } else if (a1.chapterdownloaded.some(even) == false) {
+        a1.chapterdownloaded.push(answer[i])
+        await startscrape();
+      }
+  }
+
+  async function startscrape() {
+    await axios.get(str + "/" + answer[i]).then(response => {
       const $ = cheerio.load(response.data);
       const urlElems = $("div.vung-doc");
 
       const urlimg = $(urlElems[0]).find("img");
       if (urlimg) {
-        for (let i = 0; i < urlimg.length; i++) {
-          arrurl.push(urlimg[i].attribs.src);
-          arrname.push(urlimg[i].attribs.title);
+        for (let i1 = 0; i1 < urlimg.length; i1++) {
+          arrurl.push(urlimg[i1].attribs.src);
         }
       }
-      if (callback) callback();
     });
-  };
-  scrape(function () {
       try {
-        if (fs.existsSync("./cache/" + newname + "/" + answer2)) {
-          console.log("./cache/" + newname + "/" + answer2 + " Already exists")
-        } else {
-          fs.mkdirSync("./cache/" + newname + "/" + answer2);
-        async function scrapandpack() {
-        for (let i = 0; i < arrurl.length; i++) {
-          const options = {
-            url: arrurl[i],
-            headers: {
-              "User-Agent":
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:72.0) Gecko/20100101 Firefox/72.0",
-              "Accept-Language": "en-gb",
-              "Accept-Encoding": "br, gzip, deflate",
-              Accept:
-                "test/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-              Referer: "https://mangakakalot.com"
-            },
-            dest: "./cache/" + newname + "/" + answer2
-          };
-
-         await download
-          .image(options)
-          .then(({ filename }) => {
-            console.log("Saved to", filename);
-          })
-          .catch(err => console.error(err));
-        }
-        class ZipAFolder {
- 
-          static main() {
-              zipFolder.zipFolder("./cache/" + newname + "/" + answer2, "./cache/" + newname + "/" + answer2 + ".zip", function(err) {
-                  if(err) {
-                      console.log('Something went wrong!', err);
-                  } else {
-                    del.sync(["./cache/" + newname + "/" + answer2, "!./cache/" + newname]);
-                  }
-              });
+          if (!fs.existsSync("./cache/" + newname + "/" + answer2[i])) {
+            fs.mkdirSync("./cache/" + newname + "/" + answer2[i]);
+          } else if (fs.existsSync("./cache/" + newname + "/" + answer2[i]) && fs.readdirSync("./cache/" + newname + "/" + answer2[i]).length != 0){
+            console.log(newname + "/" + answer2[i] + " Already exists")
+          }
+        async function scrap() {
+          for (let i2 = 0; i2 < arrurl.length; i2++) {
+            const options = {
+              url: arrurl[i2],
+              headers: {
+                "User-Agent":
+                  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:72.0) Gecko/20100101 Firefox/72.0",
+                "Accept-Language": "en-gb",
+                "Accept-Encoding": "br, gzip, deflate",
+                Accept:
+                  "test/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                Referer: "https://mangakakalot.com"
+              },
+              dest: "./cache/" + newname + "/" + answer2[i]
+            };
+  
+           await download
+            .image(options)
+            .then(({ filename }) => {
+              console.log("Saved to", filename);
+            })
+            .catch(err => console.error(err));
           }
         }
-        
+      await scrap();
+      async function pack() {
+        class ZipAFolder {
+          static async main() {
+            await zip("./cache/" + newname + "/" + answer2[i], "./cache/" + newname + "/" + answer2[i] + ".zip");
+            await del.sync(["./cache/" + newname + "/" + answer2[i], "!./cache/" + newname]);
+          }
+        }
         ZipAFolder.main();
       }
-      scrapandpack();
+      await pack();
+
+      if (i == answer.length -1) {
+        let tempsortstg = jsonobj.downloads[getindex(newjsonobject)].chapterdownloaded;
+        tempsortstg.sort()
+      await writenewchapters();
+      }
+  
+      async function writenewchapters() {
+        const jsonString = JSON.stringify(jsonobj)
+          fs.writeFile('./downloadlist.json', jsonString, err => {
+      if (err) {
+        console.log('Error writing file', err)
+    } else {
+        console.log('Successfully wrote file')
+    }
+    })
     }
       } catch(err) {
         console.error(err)
       }
-    });
+    }
+  }
 }
 }
+
+//////// manganelo.com \\\\\\\\
 
 function getinfosalt(url, str, $) {
   let newname = str;
@@ -300,13 +380,14 @@ function getinfosalt(url, str, $) {
   let coverurl;
   let status;
   let description;
+  let chapterlist;
 
   var getinfos1 = function (callback) {
     axios.get(url).then(response => {
       const $ = cheerio.load(response.data);
       const urlinfoElems = $("div.panel-story-info");
-     const urlinfoimg = $(urlinfoElems[0])
-        .find("img.img-loading")
+      const urlinfoimg = $(urlinfoElems[0])
+      .find("img.img-loading")
       coverurl = urlinfoimg[0].attribs.src;
 
       let urlinfos = $(urlinfoElems[0])
@@ -316,11 +397,11 @@ function getinfosalt(url, str, $) {
         .text();
 
       let alttemp = $(urlinfos[0])
-      .find("table.variations-tableInfo")
-      .find("td.table-value")[0]
-      alternative = $(alttemp)
-      .find("h2")
-      .text();
+        .find("table.variations-tableInfo")
+        .find("td.table-value")[0]
+        alternative = $(alttemp)
+        .find("h2")
+        .text();
 
       let altauthor = $(urlinfos[0])
       .find("table.variations-tableInfo")
@@ -353,7 +434,7 @@ function getinfosalt(url, str, $) {
           break
       }
       
-      let urlinfoElems2 = $("div.panel-story-info-description")
+      let urlinfoElems2 = $("div.panel-story-info-description");
       description = urlinfoElems2[0].children[2].data
       description = description.replace(/^\s+/g, '');
       description = description.replace(/(\r\n|\n|\r)/gm," ");
@@ -370,9 +451,9 @@ function getinfosalt(url, str, $) {
 
       const urlchapElems = $("div.panel-story-chapter-list");
       const chapterurls = $(urlchapElems[0])
-        .find("ul.row-content-chapter")
-        .find("li.a-h")
-        .find("a")[0].attribs.href;
+      .find("ul.row-content-chapter")
+      .find("li.a-h")
+      .find("a")[0].attribs.href;
       let searchfor = "chapter_";
       let chapterurlsearch = chapterurls.search(searchfor) - 1;
       newchapterurl = chapterurls.substring(0, chapterurlsearch);
@@ -407,7 +488,7 @@ function getinfosalt(url, str, $) {
             dest: "./cache/" + newname + "/cover.jpg"
           };
 
-         await download
+          await download
           .image(options)
           .then(({ filename }) => {
             console.log("Saved to", filename);
@@ -423,95 +504,171 @@ function getinfosalt(url, str, $) {
 
 function getchapter1(str, newname, chapterlist, $) {
 
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
-  });
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout
+});
 
-  rl.question('What Chapter do you want to Download from ' + chapterlist.length + "?", (answer) => {
-    if (answer > chapterlist.length) {
-      console.log("Your Answer was not in the Chapter range try again.")
+rl.question('What Chapter do you want to Download from ' + chapterlist.length + "? (Maximum is 5 at a time. Use 1 Number or a Number range like 1-5.)", (answer) => {
+  var multiget = answer.split('-', 2);
+  if (multiget > 2) {
+    console.log("Your Answer was not in the Chapter range try again.")
+  }
+  if (multiget[0] == NaN) {
+    console.log("The first Number was not a Number " + multiget[0])
+  } else if (multiget[1] == NaN && multiget[1] != undefined) {
+    console.log("The first Number was not a Number " + multiget[1])
+  }
+  if (multiget[1] == undefined) {
+    let chapternamearr = [];
+    let chapternamearrreal = [];
+    let chapterlistel = $(chapterlist[multiget[0] - 1])
+    .find("a")
+    .text()
+    let searchfor = ":";
+    let chaptersearch = chapterlistel.search(searchfor);
+    if (chaptersearch == -1) {
     } else {
-      let chapterlistel = $(chapterlist[answer - 1])
-      .find("a")
-      .text()
-      let searchfor = ":";
-      let chaptersearch = chapterlistel.search(searchfor);
-      if (chaptersearch == -1) {
-      } else {
-        chapterdir = chapterlistel.substring(0, chaptersearch);
-        chapterlistel = chapterdir
-      }
-
-      startscrape(regexall2(chapterlistel), regexall(chapterlistel))
+      chapterdir = chapterlistel.substring(0, chaptersearch);
+      chapterlistel = chapterdir
     }
-  rl.close();
-  });
-  function startscrape(answer, answer2) {
-  var scrape = function (callback) {
-    axios.get(str  + "/" + answer).then(response => {
+    chapternamearr.push(regexall2(chapterlistel))
+    chapternamearrreal.push(regexall(chapterlistel))
+    startscrape(chapternamearr, chapternamearrreal)
+  } else {
+    let chapternamearr = [];
+    let chapternamearrreal = [];
+    for (let i = multiget[0] - 1; i < multiget[1]; i++) {
+    let chapterlistel = $(chapterlist[i])
+    .find("a")
+    .text()
+    let searchfor = ":";
+    let chaptersearch = chapterlistel.search(searchfor);
+    if (chaptersearch == -1) {
+    } else {
+      chapterdir = chapterlistel.substring(0, chaptersearch);
+      chapterlistel = chapterdir
+    }
+    chapternamearr.push(regexall2(chapterlistel))
+    chapternamearrreal.push(regexall(chapterlistel))
+  }
+    startscrape(chapternamearr, chapternamearrreal)
+  }
+rl.close();
+});
+
+async function startscrape(answer, answer2) {
+  let newjsonobject
+  async function read() {
+    var obj = await JSON.parse(fs.readFileSync('./downloadlist.json', 'utf8'));
+    jsonobj = obj
+  }
+  
+  await read();
+  for (let i = 0; i < answer.length; i++) {
+    arrurl = [];
+
+    function getindex(object) {
+      let index = object.findIndex(ads => ads.name==newname)
+      return index
+    }
+
+    async function writenewentry(obj) {
+      newjsonobject = new Object( obj.downloads )
+        if (getindex(newjsonobject) == -1) {
+          newjsonobject[newjsonobject.length] = {"name": newname, "chapterdownloaded": []}
+          jsonobj = obj
+          await testchapterexist(jsonobj.downloads[getindex(newjsonobject)])
+        } else {
+          await testchapterexist(obj.downloads[getindex(newjsonobject)])
+        }
+    }    
+
+    await writenewentry(jsonobj)
+    
+  async function testchapterexist(a1) {
+      let even = (element) => element === answer[i];
+      if (a1.chapterdownloaded.some(even) == true) {
+      } else if (a1.chapterdownloaded.some(even) == false) {
+        a1.chapterdownloaded.push(answer[i])
+        await startscrape();
+      }
+  }
+
+  async function startscrape() {
+    await axios.get(str + "/" + answer[i]).then(response => {
       const $ = cheerio.load(response.data);
       const urlElems = $("div.container-chapter-reader");
 
       const urlimg = $(urlElems[0]).find("img");
       if (urlimg) {
-        for (let i = 0; i < urlimg.length; i++) {
-          arrurl.push(urlimg[i].attribs.src);
-          arrname.push(urlimg[i].attribs.title);
+        for (let i1 = 0; i1 < urlimg.length; i1++) {
+          arrurl.push(urlimg[i1].attribs.src);
         }
       }
-      if (callback) callback();
     });
-  };
-  scrape(function () {
-    try {
-      if (fs.existsSync("./cache/" + newname + "/" + answer2)) {
-        console.log("./cache/" + newname + "/" + answer2 + " Already exists")
-      } else {
-        fs.mkdirSync("./cache/" + newname + "/" + answer2);
-      async function scrapandpack() {
-      for (let i = 0; i < arrurl.length; i++) {
-        const options = {
-          url: arrurl[i],
-          headers: {
-            "User-Agent":
-              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:72.0) Gecko/20100101 Firefox/72.0",
-            "Accept-Language": "en-gb",
-            "Accept-Encoding": "br, gzip, deflate",
-            Accept:
-              "test/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            Referer: "https://mangakakalot.com"
-          },
-          dest: "./cache/" + newname + "/" + answer2
-        };
-
-       await download
-        .image(options)
-        .then(({ filename }) => {
-          console.log("Saved to", filename);
-        })
-        .catch(err => console.error(err));
-      }
-      class ZipAFolder {
-
-        static main() {
-            zipFolder.zipFolder("./cache/" + newname + "/" + answer2, "./cache/" + newname + "/" + answer2 + ".zip", function(err) {
-                if(err) {
-                    console.log('Something went wrong!', err);
-                } else {
-                  del.sync(["./cache/" + newname + "/" + answer2, "!./cache/" + newname]);
-                }
-            });
+      try {
+          if (!fs.existsSync("./cache/" + newname + "/" + answer2[i])) {
+            fs.mkdirSync("./cache/" + newname + "/" + answer2[i]);
+          } else if (fs.existsSync("./cache/" + newname + "/" + answer2[i]) && fs.readdirSync("./cache/" + newname + "/" + answer2[i]).length != 0){
+            console.log(newname + "/" + answer2[i] + " Already exists")
+          }
+        async function scrap() {
+          for (let i2 = 0; i2 < arrurl.length; i2++) {
+            const options = {
+              url: arrurl[i2],
+              headers: {
+                "User-Agent":
+                  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:72.0) Gecko/20100101 Firefox/72.0",
+                "Accept-Language": "en-gb",
+                "Accept-Encoding": "br, gzip, deflate",
+                Accept:
+                  "test/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                Referer: "https://mangakakalot.com"
+              },
+              dest: "./cache/" + newname + "/" + answer2[i]
+            };
+  
+           await download
+            .image(options)
+            .then(({ filename }) => {
+              console.log("Saved to", filename);
+            })
+            .catch(err => console.error(err));
+          }
         }
-      }
-      
+      await scrap();
+      async function pack() {
+        class ZipAFolder {
+          static async main() {
+            await zip("./cache/" + newname + "/" + answer2[i], "./cache/" + newname + "/" + answer2[i] + ".zip");
+            await del.sync(["./cache/" + newname + "/" + answer2[i], "!./cache/" + newname]);
+          }
+        }
         ZipAFolder.main();
       }
-      scrapandpack();
+      await pack();
+
+      if (i == answer.length -1) {
+        let tempsortstg = jsonobj.downloads[getindex(newjsonobject)].chapterdownloaded;
+        tempsortstg.sort()
+      await writenewchapters();
+      }
+  
+      async function writenewchapters() {
+        const jsonString = JSON.stringify(jsonobj)
+          fs.writeFile('./downloadlist.json', jsonString, err => {
+      if (err) {
+        console.log('Error writing file', err)
+    } else {
+        console.log('Successfully wrote file')
+    }
+    })
     }
       } catch(err) {
         console.error(err)
       }
-    });
+    }
+  }
 }
 }
